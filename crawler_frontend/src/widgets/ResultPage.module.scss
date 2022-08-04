@@ -1,0 +1,42 @@
+.results {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.result {
+    max-width: 250px;
+    margin-left: 10px;
+    margin-left: 10px;
+    margin-bottom: 25px;
+    background-color: white;
+    img  {
+        width: 100%;
+    }
+}
+
+.link {
+    text-decoration: none;
+    color: #323232;
+}
+
+.content {
+    margin: 10px;
+}
+
+.title {
+    font-size: 20px;
+}
+
+.link:hover .title {
+    text-decoration: underline;
+}
+
+.price {
+    text-decoration: none;
+    font-size: 18px;
+    color: #EE4F30;
+}
+
+.hostname {
+    font-size: 14px;
+}

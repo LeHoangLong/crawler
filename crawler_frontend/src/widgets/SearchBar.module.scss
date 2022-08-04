@@ -1,0 +1,13 @@
+.search_bar {
+    border: 1px solid black;
+    padding: 10px;
+
+    input {
+        border: none;
+        width: 100%;
+    }
+
+    input:focus {
+        outline: none;
+    }
+}
