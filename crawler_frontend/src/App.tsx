@@ -11,7 +11,7 @@ import styles from './App.module.scss';
 import { SearchBar } from './widgets/SearchBar';
 
 function App() {
-  let repository = useRef<WebSocketRepository>(new WebSocketRepository("ws://127.0.0.1:8080"))
+  let repository = useRef<WebSocketRepository>(new WebSocketRepository(process.env.REACT_APP_BACKEND_WS_URL!))
   let [priceRequestRepositoryI, setPriceRequestRepositoryI] = useState<PriceRequestRepositoryI | null>(null)
   let [socket, setSocket] = useState<WebSocketI|null>(null)
   let [loading, setIsLoading] = useState<boolean>(false)

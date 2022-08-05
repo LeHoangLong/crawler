@@ -30,7 +30,11 @@ func main() {
 // run starts a http.Server for the passed in address
 // with all requests handled by echoServer.
 func run() error {
-	l, err := net.Listen("tcp", "127.0.0.1:8080")
+	log.Printf("installing playwright")
+	playwright.Install()
+	log.Printf("installed playwright")
+
+	l, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		return err
 	}
