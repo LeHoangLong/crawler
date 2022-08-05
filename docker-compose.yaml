@@ -5,7 +5,7 @@ services:
     volumes:
       - ./crawler_frontend:/opt/app
     working_dir: /opt/app
-    command: npm start
+    command: npm install && npm start
     environment:
       - REACT_APP_BACKEND_WS_URL=ws://127.0.0.1:8080
     hostname: frontend
