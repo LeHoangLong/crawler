@@ -17,7 +17,7 @@ services:
     volumes:
       - ./crawler_go:/opt/app
     working_dir: /opt/app
-    command: sleep infinity
+    command: go run cmd/main.go
     ports:
       - 8080:8080
   
