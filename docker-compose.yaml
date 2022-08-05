@@ -13,7 +13,7 @@ services:
       - 3000:3000
   backend:
     hostname: backend
-    image: crawler_backend
+    image: lehoanglong/go_playwright
     volumes:
       - ./crawler_go:/opt/app
     working_dir: /opt/app
