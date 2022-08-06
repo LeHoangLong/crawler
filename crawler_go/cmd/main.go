@@ -33,8 +33,13 @@ func run() error {
 	log.Printf("installing playwright")
 	playwright.Install()
 	log.Printf("installed playwright")
-
-	l, err := net.Listen("tcp", ":8080")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = ":8080"
+	} else {
+		port = ":" + port
+	}
+	l, err := net.Listen("tcp", port)
 	if err != nil {
 		return err
 	}

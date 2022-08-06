@@ -1,23 +1,23 @@
 version: '3.0'
 services:
   frontend:
-    image: node:18-alpine
-    volumes:
-      - ./crawler_frontend:/opt/app
+    image: lehoanglong/crawler_frontend
     working_dir: /opt/app
-    command: /bin/sh -c 'npm install && npm start'
-    environment:
-      - REACT_APP_BACKEND_WS_URL=ws://127.0.0.1:8080
+    command: serve -s build
     hostname: frontend
-    ports:
-      - 3000:3000
   backend:
     hostname: backend
-    image: lehoanglong/go_playwright
-    volumes:
-      - ./crawler_go:/opt/app
+    image: lehoanglong/crawler_backend
     working_dir: /opt/app
-    command: go run cmd/main.go
+    environment:
+      - PORT=80
+    command: main
+  nginx: 
+    image: nginx:1.23.1-alpine
     ports:
-      - 8080:8080
+      - 80:80
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/conf
+    command: sleep infinity
+
   
