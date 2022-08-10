@@ -15,9 +15,9 @@ services:
     hostname: backend
     image: lehoanglong/go_playwright
     volumes:
-      - ./crawler_go:/opt/app
-    working_dir: /opt/app
-    command: go run cmd/main.go
+      - ./crawler_go:/opt/dev
+    working_dir: /opt/dev
+    command: sleep infinity
     ports:
       - 8080:8080
   

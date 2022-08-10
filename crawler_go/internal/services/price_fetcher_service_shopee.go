@@ -25,15 +25,14 @@ func MakePriceFetcherServiceShopee(
 }
 
 func (s *PriceFetcherServiceShopee) fetchPrice(ctx context.Context, keyword string, iPage *playwright.Page) ([]models.ItemPrice, error) {
-	page := *iPage
-	if _, err := page.Goto("https://shopee.vn/search?keyword=" + keyword); err != nil {
+	if _, err := (*iPage).Goto("https://shopee.vn/search?keyword=" + keyword); err != nil {
 		return []models.ItemPrice{}, err
 	}
 
 	var err error
 	entries := []playwright.ElementHandle{}
 	for len(entries) == 0 {
-		entries, err = page.QuerySelectorAll(".shopee-search-item-result__item")
+		entries, err = (*iPage).QuerySelectorAll(".shopee-search-item-result__item")
 		if err != nil {
 			return []models.ItemPrice{}, err
 		}

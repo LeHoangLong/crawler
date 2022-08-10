@@ -7,27 +7,44 @@ import (
 	"crawler_go/internal/repositories"
 	"crawler_go/internal/views"
 	"fmt"
-	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/playwright-community/playwright-go"
+
+	"net/url"
 )
 
 type PriceFetcherServiceLazada struct {
-	pageRepository *repositories.PageRepository
+	pageRepository      *repositories.PageRepository
+	additionalUrlParams string
+	mutex               *sync.Mutex
 }
 
 func MakePriceFetcherServiceLazada(
 	iPageRepository *repositories.PageRepository,
 ) PriceFetcherServiceLazada {
-	return PriceFetcherServiceLazada{
-		pageRepository: iPageRepository,
+	service := PriceFetcherServiceLazada{
+		pageRepository:      iPageRepository,
+		additionalUrlParams: "",
+		mutex:               &sync.Mutex{},
 	}
+	service.init()
+	return service
 }
 
-func (s *PriceFetcherServiceLazada) fetchPrice(ctx context.Context, keyword string, iPage *playwright.Page) ([]models.ItemPrice, error) {
-	page := *iPage
+func (s *PriceFetcherServiceLazada) init() {
+	ctx := context.Background()
+	page, err := s.pageRepository.GetPage(ctx)
+	if err != nil {
+		return
+	}
+	defer s.pageRepository.ReturnPage(page)
+	s.getCatalogPage("áo", page)
+}
+
+func (s *PriceFetcherServiceLazada) getCatalogPage(iKeyword string, iPage *playwright.Page) error {
 	waitUntil := "domcontentloaded"
 	option := playwright.PageGotoOptions{
 		WaitUntil: ((*playwright.WaitUntilState)(&waitUntil)),
@@ -35,72 +52,90 @@ func (s *PriceFetcherServiceLazada) fetchPrice(ctx context.Context, keyword stri
 
 	var err error
 	pageLoaded := false
+	beforeFetchPrice := time.Now()
+	s.mutex.Lock()
+	additionalUrlParams := s.additionalUrlParams
+	s.mutex.Unlock()
 	for !pageLoaded {
 	start:
-		if _, err = page.Goto("https://www.lazada.vn/", option); err != nil {
-			return []models.ItemPrice{}, err
+		{
+			now := time.Now()
+			if now.Sub(beforeFetchPrice).Seconds() > 60 {
+				additionalUrlParams = ""
+				return fmt.Errorf("could not load page from lazada")
+			}
 		}
 
-		searchBoxFound := false
-		var textInput *playwright.ElementHandle
-		start := time.Now()
-		for !searchBoxFound {
-			entries, err := page.QuerySelectorAll("input")
+		if additionalUrlParams != "" {
+			catalogUrl := "https://www.lazada.vn/catalog/?q="
+			catalogUrl += url.QueryEscape(iKeyword)
+			catalogUrl += "&" + s.additionalUrlParams
+			_, err := (*iPage).Goto(catalogUrl, option)
+			if err != nil {
+				return err
+			}
+		} else {
+			if _, err = (*iPage).Goto("https://www.lazada.vn/", option); err != nil {
+				return err
+			}
 
-			if err == nil {
-				for i := range entries {
-					attr, err := entries[i].GetAttribute("type")
-					if err == nil {
-						if attr == "search" {
-							searchBoxFound = true
-							textInput = &entries[i]
+			searchBoxFound := false
+			var textInput *playwright.ElementHandle
+			start := time.Now()
+			for !searchBoxFound {
+				entries, err := (*iPage).QuerySelectorAll("input")
+
+				if err == nil {
+					for i := range entries {
+						attr, err := entries[i].GetAttribute("type")
+						if err == nil {
+							if attr == "search" {
+								searchBoxFound = true
+								textInput = &entries[i]
+							}
 						}
 					}
 				}
-			}
 
-			now := time.Now()
-			if now.Sub(start) > 5*time.Second {
-				goto start /// restart
-			}
-		}
-		fmt.Println(2)
-
-		searchButtonFound := false
-		var searchButton *playwright.ElementHandle
-		start = time.Now()
-		for !searchButtonFound {
-			entries, err := page.QuerySelectorAll("button")
-			if err == nil {
-				for i := range entries {
-					attr, err := entries[i].GetAttribute("class")
-					if err == nil {
-						if strings.Contains(attr, "search-box") {
-							searchButtonFound = true
-							searchButton = &entries[i]
-						}
-					}
+				now := time.Now()
+				if now.Sub(start) > 15*time.Second {
+					goto start /// restart
 				}
 			}
 
-			now := time.Now()
-			if now.Sub(start) > 5*time.Second {
-				goto start /// restart
+			searchButtonFound := false
+			var searchButton *playwright.ElementHandle
+			start = time.Now()
+			for !searchButtonFound {
+				entries, err := (*iPage).QuerySelectorAll("button")
+				if err == nil {
+					for i := range entries {
+						attr, err := entries[i].GetAttribute("class")
+						if err == nil {
+							if strings.Contains(attr, "search-box") {
+								searchButtonFound = true
+								searchButton = &entries[i]
+							}
+						}
+					}
+				}
+
+				now := time.Now()
+				if now.Sub(start) > 15*time.Second {
+					goto start /// restart
+				}
 			}
-		}
 
-		fmt.Println(3)
+			fmt.Println(3)
 
-		(*textInput).Type(keyword)
-		err = (*searchButton).Click()
-		if err != nil {
-			log.Fatalf("could not click: %v", err)
+			(*textInput).Type(iKeyword)
+			(*searchButton).Click()
 		}
 
 		dataFound := false
-		start = time.Now()
+		start := time.Now()
 		for !dataFound {
-			entries, err := page.QuerySelectorAll("div")
+			entries, err := (*iPage).QuerySelectorAll("div")
 			if err == nil {
 				for i := range entries {
 					attr, err := entries[i].GetAttribute("data-qa-locator")
@@ -114,7 +149,7 @@ func (s *PriceFetcherServiceLazada) fetchPrice(ctx context.Context, keyword stri
 			}
 
 			now := time.Now()
-			if now.Sub(start) > 5*time.Second {
+			if now.Sub(start) > 15*time.Second {
 				goto start /// restart
 			}
 			time.Sleep(1 * time.Second)
@@ -125,11 +160,33 @@ func (s *PriceFetcherServiceLazada) fetchPrice(ctx context.Context, keyword stri
 			pageLoaded = true
 		}
 	}
-	fmt.Println(5)
+
+	if pageLoaded {
+		rawUrl := (*iPage).URL()
+		parsedUrl, err := url.Parse(rawUrl)
+		if err != nil {
+			return nil
+		}
+
+		query, _ := url.ParseQuery(parsedUrl.RawQuery)
+		query.Del("q")
+		s.mutex.Lock()
+		s.additionalUrlParams = query.Encode()
+		s.mutex.Unlock()
+	}
+
+	return nil
+}
+
+func (s *PriceFetcherServiceLazada) fetchPrice(ctx context.Context, keyword string, iPage *playwright.Page) ([]models.ItemPrice, error) {
+	err := s.getCatalogPage(keyword, iPage)
+	if err != nil {
+		return []models.ItemPrice{}, nil
+	}
 
 	items := []models.ItemPrice{}
 	{
-		entries, err := page.QuerySelectorAll("div")
+		entries, err := (*iPage).QuerySelectorAll("div")
 		if err != nil {
 			return []models.ItemPrice{}, err
 		}
@@ -141,6 +198,7 @@ func (s *PriceFetcherServiceLazada) fetchPrice(ctx context.Context, keyword stri
 			attr, err := entries[i].GetAttribute("data-qa-locator")
 			if err == nil {
 				if attr == "product-item" {
+					entries[i].ScrollIntoViewIfNeeded()
 					minPrice := ""
 					maxHeight := 0
 					maxHeightIndex := -1
@@ -182,13 +240,13 @@ func (s *PriceFetcherServiceLazada) fetchPrice(ctx context.Context, keyword stri
 						maxLengthIndex := -1
 						links, err := entries[i].QuerySelectorAll("a")
 						if err != nil {
-							log.Fatalf("could not get link: %v", err)
+							return []models.ItemPrice{}, err
 						}
 
 						for i := range links {
 							text, err := links[i].TextContent()
 							if err != nil {
-								log.Fatalf("could not get text: %v", err)
+								return []models.ItemPrice{}, err
 							}
 
 							if len(text) > maxLength {
@@ -205,30 +263,38 @@ func (s *PriceFetcherServiceLazada) fetchPrice(ctx context.Context, keyword stri
 					}
 
 					/// get image
+					imageRendered := false
 					image := ""
-					{
-						maxHeight := 0
-						maxHeightIndex := -1
-						imgs, err := entries[i].QuerySelectorAll("img")
-						if err != nil {
-							log.Fatalf("could not get img: %v", err)
-						}
-
-						for i := range imgs {
-							box, err := imgs[i].BoundingBox()
+					for !imageRendered {
+						entries[i].ScrollIntoViewIfNeeded()
+						{
+							imageIndex := -1
+							imgs, err := entries[i].QuerySelectorAll("img")
 							if err != nil {
-								log.Fatalf("could not get bb: %v", err)
+								return []models.ItemPrice{}, err
 							}
 
-							height := box.Height
-							if height > maxHeight {
-								maxHeight = height
-								maxHeightIndex = i
-							}
-						}
+							for i := range imgs {
+								typeVal, err := imgs[i].GetAttribute("type")
+								if err != nil {
+									return []models.ItemPrice{}, err
+								}
 
-						if maxHeightIndex != -1 {
-							image, _ = imgs[maxHeightIndex].GetAttribute("src")
+								if typeVal == "product" {
+									imageIndex = i
+									break
+								}
+							}
+
+							if imageIndex != -1 {
+								image, _ = imgs[imageIndex].GetAttribute("src")
+							}
+
+							if image != "" && !strings.Contains(image, "data:image/png;") {
+								imageRendered = true
+							} else {
+								time.Sleep(500 * time.Millisecond)
+							}
 						}
 					}
 
@@ -244,7 +310,6 @@ func (s *PriceFetcherServiceLazada) fetchPrice(ctx context.Context, keyword stri
 
 func (s *PriceFetcherServiceLazada) FetchPrice(ctx context.Context, option views.SearchOption, results chan controllers.ItemPriceResult) {
 	page, err := s.pageRepository.GetPage(ctx)
-	defer s.pageRepository.ReturnPage(page)
 	if err != nil {
 		results <- controllers.ItemPriceResult{
 			Prices: []models.ItemPrice{},
@@ -252,6 +317,7 @@ func (s *PriceFetcherServiceLazada) FetchPrice(ctx context.Context, option views
 		}
 		return
 	}
+	defer s.pageRepository.ReturnPage(page)
 
 	fmt.Println("fetching lazada")
 	start := time.Now()

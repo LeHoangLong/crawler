@@ -48,7 +48,10 @@ function App() {
   }
 
   if (loading) {
-    return <div className={ styles.loading }><Loading></Loading></div>
+    return <div className={ styles.loading }>
+      <Loading></Loading>
+      <p>Đang chạy, vui lòng đởi khoảng 30-60s</p>
+    </div>
   } else {
     return <div className={ styles.page }>
       <h1 className={ styles.title }>So sánh giá</h1>
